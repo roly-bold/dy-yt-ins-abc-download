@@ -9,16 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
 
 WORKDIR /app
 
-# Install all dependencies (including dev for build)
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy source and build
 COPY . .
 RUN npx next build
 
-# Remove dev dependencies after build
-RUN npm prune --omit=dev
-
 EXPOSE 3000
-CMD ["npx", "next", "start", "-p", "3000"]
+CMD ["npm", "start"]
