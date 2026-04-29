@@ -1,0 +1,8 @@
+# Railway Nixpacks configuration for ClipGrab
+# Next.js app with yt-dlp binary dependency
+
+[phases.setup]
+nixPkgs = ["yt-dlp"]
+
+[start]
+cmd = "npx next start -p ${PORT:-3000}"
