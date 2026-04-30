@@ -113,7 +113,7 @@ export class YtDlpError extends Error {
   stderr: string;
 
   constructor(message: string, code: number | null, stderr: string) {
-    super(message);
+    super(message + (stderr ? ` [stderr: ${stderr.substring(0, 200)}]` : ""));
     this.name = "YtDlpError";
     this.code = code;
     this.stderr = stderr;
@@ -261,7 +261,7 @@ export async function analyzeVideo(
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const { stdout } = await spawnYtDlp(
-          [url, "--dump-json", "--no-playlist", "--no-check-formats"],
+          [url, "--dump-json", "--no-playlist"],
           FORMAT_TIMEOUT_MS
         );
 
