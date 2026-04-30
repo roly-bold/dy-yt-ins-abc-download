@@ -150,7 +150,7 @@ function runYtDlp(
 
     const child = spawn(
       "yt-dlp",
-      [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime"],
+      [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime", "--js-runtimes", "deno:/usr/local/bin/deno"],
       { shell: false, stdio: ["ignore", "pipe", "pipe"] }
     );
 
