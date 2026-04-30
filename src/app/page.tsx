@@ -89,12 +89,13 @@ export default function Home() {
           downloadUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
         }
 
-        // Use iframe download to avoid loading large files into JS memory
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = downloadUrl;
-        document.body.appendChild(iframe);
-        setTimeout(() => document.body.removeChild(iframe), 10000);
+        // Trigger native browser download via <a> tag so IDM can intercept it
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = "video.mp4";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 100);
 
         setDownloads((prev) =>
           prev.map((d) =>
