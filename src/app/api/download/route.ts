@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateUrl } from "@/lib/validate-url";
 import { analyzeVideo, classifyStderr, YtDlpError, SpawnError, TimeoutError } from "@/lib/yt-dlp";
 import { spawn } from "child_process";
-import { Readable } from "stream";
+import { mkdtemp, readFile, unlink, rmdir } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,56 +54,113 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  let filename = "video.mp4";
-  let aborted = false;
+  let tmpDir = "";
+  let tmpFile = "";
 
-  const child = spawn(
-    "yt-dlp",
-    [
-      validation.normalizedUrl,
-      "-f",
-      formatId,
-      "-o",
-      "-",
-      "--no-playlist",
-      "--print-to-stderr",
-      "FILENAME:%(title).100s.%(ext)s",
-    ],
-    { shell: false, stdio: ["ignore", "pipe", "pipe"] }
-  );
+  try {
+    // Create temp directory
+    tmpDir = await mkdtemp(join(tmpdir(), "clipgrab-"));
+    tmpFile = join(tmpDir, "video.%(ext)s");
 
-  // Listen on stderr for filename parsing — this is separate from stdout
-  child.stderr!.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    const match = text.match(/FILENAME:(.+)/);
-    if (match) {
-      filename = match[1].trim().replace(/[<>:"/\\|?*]/g, "_");
+    // Download to temp file, then read and stream
+    await runYtDlp(validation.normalizedUrl, formatId, tmpFile, request.signal);
+
+    // Find the actual downloaded file (extension may vary)
+    const { readdir } = await import("fs/promises");
+    const files = await readdir(tmpDir);
+    if (files.length === 0) {
+      return NextResponse.json({ error: "Download produced no output" }, { status: 502 });
     }
-  });
 
-  // Handle cleanup
-  const timeout = setTimeout(() => {
-    aborted = true;
-    child.kill("SIGTERM");
-  }, 300_000);
+    const outputFile = join(tmpDir, files[0]);
+    const fileBuffer = await readFile(outputFile);
 
-  child.on("close", () => clearTimeout(timeout));
+    // Extract filename for Content-Disposition
+    const safeName = files[0].replace(/[<>:"/\\|?*]/g, "_");
 
-  request.signal.addEventListener("abort", () => {
-    aborted = true;
-    child.kill("SIGTERM");
-  });
+    return new NextResponse(fileBuffer, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(safeName)}"`,
+        "Content-Length": String(fileBuffer.length),
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      const msg = err.message || "Download failed";
+      if (msg.includes("timed out")) {
+        return NextResponse.json({ error: "Download timed out. Please try again." }, { status: 504 });
+      }
+      const classified = classifyStderr(msg);
+      return NextResponse.json({ error: classified.userMessage }, { status: classified.httpStatus });
+    }
+    return NextResponse.json({ error: "Download failed" }, { status: 500 });
+  } finally {
+    // Cleanup temp files
+    if (tmpDir) {
+      try { await unlink(tmpFile); } catch { /* ignore */ }
+      try {
+        const { readdir, unlink: rm, rmdir: rd } = await import("fs/promises");
+        const files = await readdir(tmpDir);
+        for (const f of files) await rm(join(tmpDir, f));
+        await rd(tmpDir);
+      } catch { /* ignore */ }
+    }
+  }
+}
 
-  // Convert Node.js stdout to Web ReadableStream via Node.js API
-  // Readable.toWeb() puts the source in paused mode and pulls on demand
-  // We call it IMMEDIATELY after spawn to avoid buffer overflow
-  const webStream = Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>;
+function runYtDlp(
+  url: string,
+  formatId: string,
+  outputPath: string,
+  signal: AbortSignal
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "yt-dlp",
+      [
+        url,
+        "-f",
+        formatId,
+        "-o",
+        outputPath,
+        "--no-playlist",
+        "--no-mtime",
+      ],
+      { shell: false, stdio: ["ignore", "pipe", "pipe"] }
+    );
 
-  return new NextResponse(webStream, {
-    headers: {
-      "Content-Type": "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
-      "Cache-Control": "no-store",
-    },
+    const stderrChunks: string[] = [];
+
+    child.stderr!.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk.toString());
+    });
+
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("Download timed out"));
+    }, 300_000);
+
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) {
+        resolve();
+      } else {
+        const stderr = stderrChunks.join("");
+        reject(new Error(stderr || `yt-dlp exited with code ${code}`));
+      }
+    });
+
+    child.on("error", (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    signal.addEventListener("abort", () => {
+      child.kill("SIGTERM");
+      clearTimeout(timeout);
+      reject(new Error("Client disconnected"));
+    });
   });
 }
