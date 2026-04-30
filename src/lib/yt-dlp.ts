@@ -261,7 +261,13 @@ export async function analyzeVideo(
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const { stdout } = await spawnYtDlp(
-          [url, "--dump-json", "--no-playlist", "--js-runtimes", "deno:/usr/local/bin/deno"],
+          [
+            url,
+            "--dump-json",
+            "--no-playlist",
+            "--js-runtimes", "deno:/usr/local/bin/deno",
+            "--extractor-args", "youtube:player_client=ios",
+          ],
           FORMAT_TIMEOUT_MS
         );
 
