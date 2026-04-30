@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateUrl } from "@/lib/validate-url";
 import { analyzeVideo, classifyStderr, YtDlpError, SpawnError, TimeoutError } from "@/lib/yt-dlp";
+import { spawn } from "child_process";
+import { Readable } from "stream";
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,86 +52,56 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  try {
-    const { spawn } = require("child_process");
-    const child = spawn(
-      "yt-dlp",
-      [
-        validation.normalizedUrl,
-        "-f",
-        formatId,
-        "-o",
-        "-",
-        "--no-playlist",
-        "--print-to-stderr",
-        "FILENAME:%(title).100s.%(ext)s",
-      ],
-      { shell: false, stdio: ["ignore", "pipe", "pipe"] }
-    );
+  let filename = "video.mp4";
+  let aborted = false;
 
-    let filename = "video.mp4";
-    const stderrChunks: string[] = [];
+  const child = spawn(
+    "yt-dlp",
+    [
+      validation.normalizedUrl,
+      "-f",
+      formatId,
+      "-o",
+      "-",
+      "--no-playlist",
+      "--print-to-stderr",
+      "FILENAME:%(title).100s.%(ext)s",
+    ],
+    { shell: false, stdio: ["ignore", "pipe", "pipe"] }
+  );
 
-    child.stderr.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderrChunks.push(text);
-      const match = text.match(/FILENAME:(.+)/);
-      if (match) {
-        filename = match[1].trim().replace(/[<>:"/\\|?*]/g, "_");
-      }
-    });
+  // Listen on stderr for filename parsing — this is separate from stdout
+  child.stderr!.on("data", (chunk: Buffer) => {
+    const text = chunk.toString();
+    const match = text.match(/FILENAME:(.+)/);
+    if (match) {
+      filename = match[1].trim().replace(/[<>:"/\\|?*]/g, "_");
+    }
+  });
 
-    let aborted = false;
+  // Handle cleanup
+  const timeout = setTimeout(() => {
+    aborted = true;
+    child.kill("SIGTERM");
+  }, 300_000);
 
-    const stream = new ReadableStream({
-      start(controller) {
-        child.stdout.on("data", (chunk: Buffer) => {
-          if (!aborted) controller.enqueue(new Uint8Array(chunk));
-        });
+  child.on("close", () => clearTimeout(timeout));
 
-        child.stdout.on("end", () => {
-          if (!aborted) controller.close();
-        });
+  request.signal.addEventListener("abort", () => {
+    aborted = true;
+    child.kill("SIGTERM");
+  });
 
-        child.on("error", (err: Error) => {
-          if (!aborted) controller.error(err);
-        });
+  // Convert Node.js stdout to Web ReadableStream via Node.js API
+  // Readable.toWeb() puts the source in paused mode and pulls on demand
+  // We call it IMMEDIATELY after spawn to avoid buffer overflow
+  const webStream = Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>;
 
-        const timeout = setTimeout(() => {
-          aborted = true;
-          child.kill("SIGTERM");
-          controller.error(new Error("Download timed out"));
-        }, 300_000);
-
-        child.on("close", () => {
-          clearTimeout(timeout);
-          if (!aborted) {
-            try { controller.close(); } catch { /* already closed */ }
-          }
-        });
-
-        request.signal.addEventListener("abort", () => {
-          aborted = true;
-          child.kill("SIGTERM");
-          clearTimeout(timeout);
-        });
-      },
-      cancel() {
-        aborted = true;
-        child.kill("SIGTERM");
-      },
-    });
-
-    return new NextResponse(stream, {
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Cache-Control": "no-store",
-      },
-    });
-  } catch (err: unknown) {
-    const stderr = "";
-    const classified = classifyStderr(stderr);
-    return NextResponse.json({ error: classified.userMessage }, { status: classified.httpStatus });
-  }
+  return new NextResponse(webStream, {
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
