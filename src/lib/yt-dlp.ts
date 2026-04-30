@@ -289,7 +289,7 @@ export async function analyzeVideo(
             "--dump-json",
             "--no-playlist",
             "--js-runtimes", "deno:/usr/local/bin/deno",
-            "--extractor-args", "youtube:player_client=android",
+            "--extractor-args", "youtube:player_client=android,ios,web",
           ],
           FORMAT_TIMEOUT_MS
         );

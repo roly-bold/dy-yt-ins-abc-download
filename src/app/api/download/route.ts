@@ -151,7 +151,7 @@ function runYtDlp(
 
     const child = spawn(
       "yt-dlp",
-      [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime", "--js-runtimes", "deno:/usr/local/bin/deno", "--extractor-args", "youtube:player_client=android"],
+      [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime", "--js-runtimes", "deno:/usr/local/bin/deno", "--extractor-args", "youtube:player_client=android,ios,web"],
       { shell: false, stdio: ["ignore", "pipe", "pipe"] }
     );
 
