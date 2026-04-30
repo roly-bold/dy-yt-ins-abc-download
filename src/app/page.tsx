@@ -89,13 +89,12 @@ export default function Home() {
           downloadUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
         }
 
-        // Use native browser download (not blob) to avoid loading large files into JS memory
-        const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = "";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // Use iframe download to avoid loading large files into JS memory
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = downloadUrl;
+        document.body.appendChild(iframe);
+        setTimeout(() => document.body.removeChild(iframe), 10000);
 
         setDownloads((prev) =>
           prev.map((d) =>
