@@ -72,8 +72,10 @@ function FormatCard({
 }
 
 export function FormatGrid({ videoInfo, onSelect }: FormatGridProps) {
-  const video = videoInfo.formats.filter((f) => !f.isAudioOnly && f.resolution !== "audio only");
+  const video = videoInfo.formats.filter((f) => !f.isAudioOnly);
   const audio = videoInfo.formats.filter((f) => f.isAudioOnly);
+  const combined = videoInfo.formats.filter((f) => !f.isAudioOnly && !f.isVideoOnly);
+  const videoOnly = videoInfo.formats.filter((f) => f.isVideoOnly && !f.isAudioOnly);
 
   const platformColor =
     videoInfo.platform === "instagram"
@@ -111,12 +113,32 @@ export function FormatGrid({ videoInfo, onSelect }: FormatGridProps) {
         </div>
       </div>
 
-      {/* Video formats */}
-      {video.length > 0 && (
+      {/* Combined formats (video + audio) */}
+      {combined.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-sm font-medium text-[#999] mb-3 uppercase tracking-wider">Video</h3>
+          <h3 className="text-sm font-medium text-[#999] mb-3 uppercase tracking-wider">Video + Audio</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {video.slice(0, 6).map((f) => (
+            {combined.map((f) => (
+              <FormatCard
+                key={f.id}
+                format={f}
+                isAudio={false}
+                onSelect={() => onSelect(f.id)}
+                accentColor={platformColor}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Video-only formats */}
+      {videoOnly.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-[#999] mb-3 uppercase tracking-wider">
+            Video Only (no audio)
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {videoOnly.map((f) => (
               <FormatCard
                 key={f.id}
                 format={f}
@@ -132,9 +154,9 @@ export function FormatGrid({ videoInfo, onSelect }: FormatGridProps) {
       {/* Audio formats */}
       {audio.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-sm font-medium text-[#999] mb-3 uppercase tracking-wider">Audio</h3>
+          <h3 className="text-sm font-medium text-[#999] mb-3 uppercase tracking-wider">Audio Only</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {audio.slice(0, 4).map((f) => (
+            {audio.map((f) => (
               <FormatCard
                 key={f.id}
                 format={f}
@@ -147,13 +169,11 @@ export function FormatGrid({ videoInfo, onSelect }: FormatGridProps) {
         </div>
       )}
 
-      {/* Quick Download — best quality */}
+      {/* Quick Download — best combined format, or best video + best audio note */}
       <div className="mt-8 text-center">
         <button
           onClick={() => {
-            const best = videoInfo.formats.find(
-              (f) => !f.isAudioOnly && !f.isVideoOnly
-            ) || videoInfo.formats[0];
+            const best = combined[0] || video[0] || videoInfo.formats[0];
             if (best) onSelect(best.id);
           }}
           className="px-8 py-3 text-sm font-medium rounded-2xl transition-all duration-200 hover:scale-[1.02]"
@@ -165,6 +185,11 @@ export function FormatGrid({ videoInfo, onSelect }: FormatGridProps) {
         >
           Quick Download — Best Quality
         </button>
+        {videoOnly.length > 0 && combined.length === 0 && (
+          <p className="mt-2 text-xs text-[#666]">
+            High-res formats are video-only. Download a video track and an audio track to merge locally with ffmpeg.
+          </p>
+        )}
       </div>
     </div>
   );

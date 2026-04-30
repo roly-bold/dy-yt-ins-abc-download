@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         "-o",
         "-",
         "--no-playlist",
-        "--print",
+        "--print-to-stderr",
         "FILENAME:%(title).100s.%(ext)s",
       ],
       { shell: false, stdio: ["ignore", "pipe", "pipe"] }

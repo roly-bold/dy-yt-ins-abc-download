@@ -195,27 +195,46 @@ export function classifyStderr(stderr: string): {
   };
 }
 
+function parseResolutionHeight(res: string | null | undefined): number {
+  if (!res || res === "audio only") return 0;
+  const match = res.match(/(\d+)p/) || res.match(/x(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
 function parseFormats(json: Record<string, unknown>): VideoFormat[] {
   const formats = json.formats as Array<Record<string, unknown>> | undefined;
   if (!formats || !Array.isArray(formats)) return [];
 
-  return formats
-    .filter((f) => {
-      const ext = f.ext as string | undefined;
-      return ext && ["mp4", "webm", "m4a", "mp3", "aac"].includes(ext);
-    })
-    .map((f) => ({
+  const parsed: VideoFormat[] = [];
+
+  for (const f of formats) {
+    const ext = f.ext as string | undefined;
+    if (!ext || !["mp4", "webm", "m4a", "mp3", "aac", "opus"].includes(ext)) continue;
+
+    const vcodec = (f.vcodec as string) || "none";
+    const acodec = (f.acodec as string) || "none";
+
+    parsed.push({
       id: (f.format_id as string) || "unknown",
-      ext: (f.ext as string) || "unknown",
-      resolution: f.resolution as string || "audio only",
+      ext: ext,
+      resolution: (f.resolution as string) || (vcodec !== "none" ? "video" : "audio only"),
       fps: (f.fps as number) || null,
       fileSize: f.filesize ? formatFileSize(f.filesize as number) : null,
       tbr: (f.tbr as number) || null,
-      vcodec: (f.vcodec as string) || "none",
-      acodec: (f.acodec as string) || "none",
-      isAudioOnly: f.vcodec === "none" || f.resolution === "audio only",
-      isVideoOnly: f.acodec === "none",
-    }));
+      vcodec,
+      acodec,
+      isAudioOnly: vcodec === "none",
+      isVideoOnly: acodec === "none",
+    });
+  }
+
+  // Sort: video formats by resolution height descending, then audio by bitrate descending
+  return parsed.sort((a, b) => {
+    const aH = parseResolutionHeight(a.resolution);
+    const bH = parseResolutionHeight(b.resolution);
+    if (bH !== aH) return bH - aH;
+    return (b.tbr || 0) - (a.tbr || 0);
+  });
 }
 
 function formatFileSize(bytes: number): string {
