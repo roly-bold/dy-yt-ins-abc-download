@@ -255,32 +255,47 @@ export async function analyzeVideo(
 
   await semaphore.acquire();
   try {
-    const { stdout } = await spawnYtDlp(
-      [url, "--dump-json", "--no-playlist", "--no-check-formats"],
-      FORMAT_TIMEOUT_MS
-    );
+    let lastError: Error | null = null;
 
-    const json = JSON.parse(stdout);
+    // Retry once for transient YouTube bot-detection failures
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { stdout } = await spawnYtDlp(
+          [url, "--dump-json", "--no-playlist", "--no-check-formats"],
+          FORMAT_TIMEOUT_MS
+        );
 
-    const videoInfo: VideoInfo = {
-      platform: detectPlatformFromJson(json),
-      title: (json.title as string) || "Untitled",
-      thumbnail: (json.thumbnail as string) || "",
-      duration: (json.duration as number) || 0,
-      uploader: (json.uploader as string) || "Unknown",
-      formats: [],
-      url,
-    };
+        const json = JSON.parse(stdout);
 
-    const formats = parseFormats(json);
-    videoInfo.formats = formats;
+        const videoInfo: VideoInfo = {
+          platform: detectPlatformFromJson(json),
+          title: (json.title as string) || "Untitled",
+          thumbnail: (json.thumbnail as string) || "",
+          duration: (json.duration as number) || 0,
+          uploader: (json.uploader as string) || "Unknown",
+          formats: [],
+          url,
+        };
 
-    formatCache.set(cacheKey, {
-      data: videoInfo,
-      expires: Date.now() + CACHE_TTL_MS,
-    });
+        const formats = parseFormats(json);
+        videoInfo.formats = formats;
 
-    return { videoInfo, formats };
+        formatCache.set(cacheKey, {
+          data: videoInfo,
+          expires: Date.now() + CACHE_TTL_MS,
+        });
+
+        return { videoInfo, formats };
+      } catch (err) {
+        lastError = err as Error;
+        // Only retry on YtDlpError (not timeout, spawn, or parse errors)
+        if (!(err instanceof YtDlpError) || attempt >= 1) throw err;
+        // Small delay before retry
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    throw lastError!;
   } finally {
     semaphore.release();
   }
