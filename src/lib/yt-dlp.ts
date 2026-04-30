@@ -289,6 +289,7 @@ export async function analyzeVideo(
           "--dump-json",
           "--no-playlist",
           "--js-runtimes", "deno:/usr/local/bin/deno",
+          "--remote-components", "ejs:github",
         ];
         if (cookiesPath) {
           args.push("--cookies", cookiesPath);
