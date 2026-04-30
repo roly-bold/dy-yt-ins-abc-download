@@ -89,8 +89,8 @@ export default function Home() {
           downloadUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
         }
 
-        // Open download URL — server returns Content-Disposition: attachment so browser will download
-        window.open(downloadUrl, "_blank");
+        // Navigate to download URL — server responds with Content-Disposition: attachment so browser downloads without leaving the page
+        window.location.href = downloadUrl;
 
         setDownloads((prev) =>
           prev.map((d) =>
