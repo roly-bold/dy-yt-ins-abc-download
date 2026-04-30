@@ -82,6 +82,9 @@ function spawnYtDlp(
       clearTimeout(stdoutTimer);
       if (code === 0 || code === null) {
         resolve({ stdout, stderr });
+      } else if (stdout.length > 0) {
+        // yt-dlp may exit non-zero on warnings but still produce valid output
+        resolve({ stdout, stderr });
       } else {
         reject(new YtDlpError("yt-dlp exited with error", code, stderr));
       }
@@ -113,7 +116,7 @@ export class YtDlpError extends Error {
   stderr: string;
 
   constructor(message: string, code: number | null, stderr: string) {
-    super(message + (stderr ? ` [stderr: ${stderr.substring(0, 200)}]` : ""));
+    super(message + (stderr ? ` [stderr: ${stderr.substring(0, 500)}]` : ""));
     this.name = "YtDlpError";
     this.code = code;
     this.stderr = stderr;

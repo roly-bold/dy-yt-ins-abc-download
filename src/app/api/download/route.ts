@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
 
     if (err instanceof YtDlpError) {
       const { httpStatus, userMessage } = err.classify();
-      console.error(`[POST] YtDlpError: ${httpStatus} ${userMessage}`);
+      console.error(`[POST] YtDlpError: code=${err.code} httpStatus=${httpStatus} stderr_len=${err.stderr.length}`);
+      console.error(`[POST] full stderr: ${err.stderr.substring(0, 500)}`);
       return NextResponse.json({ error: userMessage }, { status: httpStatus });
     }
     if (err instanceof TimeoutError) {
@@ -168,12 +169,12 @@ function runYtDlp(
 
     child.on("close", (code) => {
       clearTimeout(timeout);
-      console.log(`[yt-dlp] exit code ${code}`);
+      const stderr = stderrChunks.join("");
+      console.log(`[yt-dlp] exit code ${code}, stderr_len=${stderr.length}`);
+      if (stderr) console.error(`[yt-dlp] stderr: ${stderr.substring(0, 500)}`);
       if (code === 0) {
         resolve();
       } else {
-        const stderr = stderrChunks.join("");
-        console.error(`[yt-dlp] stderr: ${stderr.substring(0, 300)}`);
         reject(new Error(stderr || `yt-dlp exited with code ${code}`));
       }
     });
