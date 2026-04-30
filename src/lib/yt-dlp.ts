@@ -124,6 +124,13 @@ export class YtDlpError extends Error {
 
   classify(): { httpStatus: number; userMessage: string } {
     const combined = this.stderr.toLowerCase();
+    if (combined.includes("sign in") || combined.includes("bot")) {
+      return {
+        httpStatus: 403,
+        userMessage:
+          "YouTube is asking for sign-in. This video requires browser cookies to access. Some videos may not be downloadable from cloud servers.",
+      };
+    }
     if (combined.includes("403") || combined.includes("forbidden")) {
       return {
         httpStatus: 429,
@@ -168,6 +175,13 @@ export function classifyStderr(stderr: string): {
   userMessage: string;
 } {
   const combined = stderr.toLowerCase();
+  if (combined.includes("sign in") || combined.includes("bot")) {
+    return {
+      httpStatus: 403,
+      userMessage:
+        "YouTube is asking for sign-in. This video requires browser cookies to access. Some videos may not be downloadable from cloud servers.",
+    };
+  }
   if (combined.includes("403") || combined.includes("forbidden")) {
     return {
       httpStatus: 429,
@@ -190,6 +204,12 @@ export function classifyStderr(stderr: string): {
     return {
       httpStatus: 403,
       userMessage: "This video is private or requires authentication.",
+    };
+  }
+  if (combined.includes("no space")) {
+    return {
+      httpStatus: 507,
+      userMessage: "Not enough disk space to process this download.",
     };
   }
   return {
@@ -269,7 +289,7 @@ export async function analyzeVideo(
             "--dump-json",
             "--no-playlist",
             "--js-runtimes", "deno:/usr/local/bin/deno",
-            "--extractor-args", "youtube:player_client=ios",
+            "--extractor-args", "youtube:player_client=android",
           ],
           FORMAT_TIMEOUT_MS
         );
