@@ -1,28 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateUrl } from "@/lib/validate-url";
 import { analyzeVideo, classifyStderr, YtDlpError, SpawnError, TimeoutError } from "@/lib/yt-dlp";
+import { storeCookies, getCookies } from "@/lib/cookie-store";
 import { spawn } from "child_process";
 import { mkdtemp, readFile, writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { randomUUID } from "crypto";
-
-const cookieStore = new Map<string, { cookies: string; expires: number }>();
-const COOKIE_TOKEN_TTL = 600_000; // 10 minutes
-
-function gcCookieStore() {
-  const now = Date.now();
-  for (const [token, entry] of cookieStore) {
-    if (entry.expires < now) cookieStore.delete(token);
-  }
-}
-
-function storeCookies(cookies: string): string {
-  gcCookieStore();
-  const token = randomUUID();
-  cookieStore.set(token, { cookies, expires: Date.now() + COOKIE_TOKEN_TTL });
-  return token;
-}
 
 async function writeCookiesFile(cookies: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "cookies-"));
@@ -134,8 +117,8 @@ export async function GET(request: NextRequest) {
     console.log(`[GET] temp dir: ${tmpDir}`);
 
     if (cookieToken) {
-      const entry = cookieStore.get(cookieToken);
-      if (entry && entry.expires > Date.now()) {
+      const entry = getCookies(cookieToken);
+      if (entry) {
         cookiesPath = await writeCookiesFile(entry.cookies);
         console.log(`[GET] using cookies from token: ${cookieToken}`);
       } else {

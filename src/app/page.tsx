@@ -84,19 +84,21 @@ export default function Home() {
           prev.map((d) => (d.id === downloadId ? { ...d, status: "downloading" } : d))
         );
 
-        let downloadUrl = `/api/download?url=${encodeURIComponent(videoInfo.url)}&format=${formatId}`;
+        // Phase 1: Ask server to download the file (async, returns fileId when ready)
+        let prepareUrl = `/api/download/prepare?url=${encodeURIComponent(videoInfo.url)}&format=${formatId}`;
         if (cookieToken) {
-          downloadUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
+          prepareUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
         }
 
-        // Navigate to download URL — server responds with Content-Disposition: attachment so browser downloads without leaving the page
-        window.location.href = downloadUrl;
+        const prepareRes = await fetch(prepareUrl, { method: "POST" });
+        const prepareData = await prepareRes.json();
 
-        setDownloads((prev) =>
-          prev.map((d) =>
-            d.id === downloadId ? { ...d, progress: 100, status: "complete" } : d
-          )
-        );
+        if (!prepareRes.ok || prepareData.error) {
+          throw new Error(prepareData.error || "Download preparation failed");
+        }
+
+        // Phase 2: Navigate to pre-downloaded file — served instantly, browser WILL download
+        window.location.href = `/api/download/file?fileId=${prepareData.fileId}`;
       } catch (err: unknown) {
         setDownloads((prev) =>
           prev.map((d) =>
