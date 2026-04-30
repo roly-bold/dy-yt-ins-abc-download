@@ -89,13 +89,8 @@ export default function Home() {
           downloadUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
         }
 
-        // Trigger native browser download via <a> tag so IDM can intercept it
-        const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = "video.mp4";
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => document.body.removeChild(a), 100);
+        // Open download URL — server returns Content-Disposition: attachment so browser will download
+        window.open(downloadUrl, "_blank");
 
         setDownloads((prev) =>
           prev.map((d) =>
