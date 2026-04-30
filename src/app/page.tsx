@@ -89,26 +89,13 @@ export default function Home() {
           downloadUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
         }
 
-        const res = await fetch(downloadUrl);
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Download failed");
-        }
-
-        const contentDisposition = res.headers.get("Content-Disposition");
-        const filename =
-          contentDisposition?.match(/filename="(.+)"/)?.[1] || "video.mp4";
-
-        const blob = await res.blob();
-        const downloadUrlObj = URL.createObjectURL(blob);
+        // Use native browser download (not blob) to avoid loading large files into JS memory
         const a = document.createElement("a");
-        a.href = downloadUrlObj;
-        a.download = filename;
+        a.href = downloadUrl;
+        a.download = "";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(downloadUrlObj);
 
         setDownloads((prev) =>
           prev.map((d) =>
