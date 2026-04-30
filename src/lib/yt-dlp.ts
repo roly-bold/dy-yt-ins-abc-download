@@ -268,7 +268,8 @@ function formatFileSize(bytes: number): string {
 }
 
 export async function analyzeVideo(
-  url: string
+  url: string,
+  cookiesPath?: string
 ): Promise<{ videoInfo: VideoInfo; formats: VideoFormat[] }> {
   const cacheKey = getCacheKey(url);
   const cached = formatCache.get(cacheKey);
@@ -283,16 +284,18 @@ export async function analyzeVideo(
     // Retry once for transient YouTube bot-detection failures
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const { stdout } = await spawnYtDlp(
-          [
-            url,
-            "--dump-json",
-            "--no-playlist",
-            "--js-runtimes", "deno:/usr/local/bin/deno",
-            "--extractor-args", "youtube:player_client=android,ios,web",
-          ],
-          FORMAT_TIMEOUT_MS
-        );
+        const args = [
+          url,
+          "--dump-json",
+          "--no-playlist",
+          "--js-runtimes", "deno:/usr/local/bin/deno",
+        ];
+        if (cookiesPath) {
+          args.push("--cookies", cookiesPath);
+        } else {
+          args.push("--extractor-args", "youtube:player_client=android,ios,web");
+        }
+        const { stdout } = await spawnYtDlp(args, FORMAT_TIMEOUT_MS);
 
         const json = JSON.parse(stdout);
 

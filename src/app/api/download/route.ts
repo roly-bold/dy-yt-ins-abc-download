@@ -2,17 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateUrl } from "@/lib/validate-url";
 import { analyzeVideo, classifyStderr, YtDlpError, SpawnError, TimeoutError } from "@/lib/yt-dlp";
 import { spawn } from "child_process";
-import { mkdtemp, readFile } from "fs/promises";
+import { mkdtemp, readFile, writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { randomUUID } from "crypto";
+
+const cookieStore = new Map<string, { cookies: string; expires: number }>();
+const COOKIE_TOKEN_TTL = 600_000; // 10 minutes
+
+function gcCookieStore() {
+  const now = Date.now();
+  for (const [token, entry] of cookieStore) {
+    if (entry.expires < now) cookieStore.delete(token);
+  }
+}
+
+function storeCookies(cookies: string): string {
+  gcCookieStore();
+  const token = randomUUID();
+  cookieStore.set(token, { cookies, expires: Date.now() + COOKIE_TOKEN_TTL });
+  return token;
+}
+
+async function writeCookiesFile(cookies: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "cookies-"));
+  const path = join(dir, "cookies.txt");
+  await writeFile(path, cookies, "utf-8");
+  return path;
+}
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  let cookiesPath: string | undefined;
   try {
     const body = await request.json();
     const url = body.url as string | undefined;
+    const cookies = body.cookies as string | undefined;
 
-    console.log(`[POST] analyze request: url=${url?.substring(0, 80)}...`);
+    console.log(`[POST] analyze request: url=${url?.substring(0, 80)}..., cookies=${cookies ? "yes" : "no"}`);
 
     if (!url) {
       console.log("[POST] missing URL");
@@ -27,12 +54,22 @@ export async function POST(request: NextRequest) {
 
     console.log(`[POST] validated: platform=${validation.platform}, normalized=${validation.normalizedUrl.substring(0, 80)}`);
 
-    const { videoInfo, formats } = await analyzeVideo(validation.normalizedUrl);
+    if (cookies && cookies.trim().length > 0) {
+      cookiesPath = await writeCookiesFile(cookies);
+      console.log(`[POST] cookies file: ${cookiesPath}`);
+    }
+
+    const { videoInfo, formats } = await analyzeVideo(validation.normalizedUrl, cookiesPath);
 
     const elapsed = Date.now() - startTime;
     console.log(`[POST] success: ${formats.length} formats, ${elapsed}ms`);
 
-    return NextResponse.json({ videoInfo, formats, platform: validation.platform });
+    const response: Record<string, unknown> = { videoInfo, formats, platform: validation.platform };
+    if (cookies && cookies.trim().length > 0) {
+      response.cookieToken = storeCookies(cookies);
+    }
+
+    return NextResponse.json(response);
   } catch (err: unknown) {
     const elapsed = Date.now() - startTime;
     console.error(`[POST] error after ${elapsed}ms:`, err instanceof Error ? err.message : String(err));
@@ -55,6 +92,15 @@ export async function POST(request: NextRequest) {
     }
     console.error(`[POST] unhandled error:`, err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } finally {
+    if (cookiesPath) {
+      try {
+        const dir = cookiesPath.substring(0, cookiesPath.lastIndexOf("/"));
+        await unlink(cookiesPath);
+        const { rmdir } = await import("fs/promises");
+        await rmdir(dir);
+      } catch { /* ignore cleanup errors */ }
+    }
   }
 }
 
@@ -62,8 +108,9 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   const url = request.nextUrl.searchParams.get("url");
   const formatId = request.nextUrl.searchParams.get("format");
+  const cookieToken = request.nextUrl.searchParams.get("cookieToken");
 
-  console.log(`[GET] download request: format=${formatId}, url=${url?.substring(0, 80)}...`);
+  console.log(`[GET] download request: format=${formatId}, cookieToken=${cookieToken ? "yes" : "no"}, url=${url?.substring(0, 80)}...`);
 
   if (!url || !formatId) {
     console.log("[GET] missing params");
@@ -78,6 +125,7 @@ export async function GET(request: NextRequest) {
 
   let tmpDir = "";
   let tmpFile = "";
+  let cookiesPath: string | undefined;
 
   try {
     tmpDir = await mkdtemp(join(tmpdir(), "clipgrab-"));
@@ -85,7 +133,17 @@ export async function GET(request: NextRequest) {
 
     console.log(`[GET] temp dir: ${tmpDir}`);
 
-    await runYtDlp(validation.normalizedUrl, formatId, tmpFile, request.signal);
+    if (cookieToken) {
+      const entry = cookieStore.get(cookieToken);
+      if (entry && entry.expires > Date.now()) {
+        cookiesPath = await writeCookiesFile(entry.cookies);
+        console.log(`[GET] using cookies from token: ${cookieToken}`);
+      } else {
+        console.log(`[GET] cookie token expired or not found: ${cookieToken}`);
+      }
+    }
+
+    await runYtDlp(validation.normalizedUrl, formatId, tmpFile, request.signal, cookiesPath);
 
     const { readdir } = await import("fs/promises");
     const files = await readdir(tmpDir);
@@ -131,10 +189,18 @@ export async function GET(request: NextRequest) {
     // Cleanup temp files
     if (tmpDir) {
       try {
-        const { readdir, unlink, rmdir } = await import("fs/promises");
+        const { readdir, unlink: unl, rmdir } = await import("fs/promises");
         const files = await readdir(tmpDir);
-        for (const f of files) await unlink(join(tmpDir, f));
+        for (const f of files) await unl(join(tmpDir, f));
         await rmdir(tmpDir);
+      } catch { /* ignore cleanup errors */ }
+    }
+    if (cookiesPath) {
+      try {
+        const dir = cookiesPath.substring(0, cookiesPath.lastIndexOf("/"));
+        await unlink(cookiesPath);
+        const { rmdir } = await import("fs/promises");
+        await rmdir(dir);
       } catch { /* ignore cleanup errors */ }
     }
   }
@@ -144,16 +210,20 @@ function runYtDlp(
   url: string,
   formatId: string,
   outputPath: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  cookiesPath?: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    console.log(`[yt-dlp] spawning: -f ${formatId} -o ${outputPath} ${url.substring(0, 60)}...`);
+    const args = [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime", "--js-runtimes", "deno:/usr/local/bin/deno"];
+    if (cookiesPath) {
+      args.push("--cookies", cookiesPath);
+    } else {
+      args.push("--extractor-args", "youtube:player_client=android,ios,web");
+    }
 
-    const child = spawn(
-      "yt-dlp",
-      [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime", "--js-runtimes", "deno:/usr/local/bin/deno", "--extractor-args", "youtube:player_client=android,ios,web"],
-      { shell: false, stdio: ["ignore", "pipe", "pipe"] }
-    );
+    console.log(`[yt-dlp] spawning: -f ${formatId} -o ${outputPath} ${url.substring(0, 60)}... cookies=${cookiesPath ? "yes" : "no"}`);
+
+    const child = spawn("yt-dlp", args, { shell: false, stdio: ["ignore", "pipe", "pipe"] });
 
     const stderrChunks: string[] = [];
 

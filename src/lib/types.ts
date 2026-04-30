@@ -42,6 +42,7 @@ export interface ApiAnalyzeResponse {
   videoInfo?: VideoInfo;
   error?: string;
   platform?: Platform;
+  cookieToken?: string;
 }
 
 export interface ApiErrorResponse {

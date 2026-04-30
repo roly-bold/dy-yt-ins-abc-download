@@ -5,6 +5,7 @@ import { MagicInput } from "@/components/MagicInput";
 import { FormatGrid } from "@/components/FormatGrid";
 import { DownloadManager } from "@/components/DownloadManager";
 import { PlatformIndicator } from "@/components/PlatformIndicator";
+import { CookieUpload } from "@/components/CookieUpload";
 import { VideoInfo, DownloadState, Platform, ApiAnalyzeResponse } from "@/lib/types";
 
 export default function Home() {
@@ -13,6 +14,8 @@ export default function Home() {
   const [error, setError] = useState<string>("");
   const [platform, setPlatform] = useState<Platform>("unknown");
   const [downloads, setDownloads] = useState<DownloadState[]>([]);
+  const [cookies, setCookies] = useState("");
+  const [cookieToken, setCookieToken] = useState<string | null>(null);
 
   const handleSubmit = useCallback(async (url: string, detectedPlatform: Platform) => {
     setPhase("parsing");
@@ -20,10 +23,15 @@ export default function Home() {
     setError("");
 
     try {
+      const body: Record<string, string> = { url };
+      if (cookies.trim()) {
+        body.cookies = cookies;
+      }
+
       const res = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify(body),
       });
 
       const data: ApiAnalyzeResponse = await res.json();
@@ -32,6 +40,10 @@ export default function Home() {
         setError(data.error || "Failed to analyze video");
         setPhase("error");
         return;
+      }
+
+      if (data.cookieToken) {
+        setCookieToken(data.cookieToken);
       }
 
       if (data.videoInfo) {
@@ -45,7 +57,7 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Network error");
       setPhase("error");
     }
-  }, []);
+  }, [cookies]);
 
   const handleDownload = useCallback(
     async (formatId: string) => {
@@ -72,9 +84,12 @@ export default function Home() {
           prev.map((d) => (d.id === downloadId ? { ...d, status: "downloading" } : d))
         );
 
-        const res = await fetch(
-          `/api/download?url=${encodeURIComponent(videoInfo.url)}&format=${formatId}`
-        );
+        let downloadUrl = `/api/download?url=${encodeURIComponent(videoInfo.url)}&format=${formatId}`;
+        if (cookieToken) {
+          downloadUrl += `&cookieToken=${encodeURIComponent(cookieToken)}`;
+        }
+
+        const res = await fetch(downloadUrl);
 
         if (!res.ok) {
           const err = await res.json();
@@ -86,14 +101,14 @@ export default function Home() {
           contentDisposition?.match(/filename="(.+)"/)?.[1] || "video.mp4";
 
         const blob = await res.blob();
-        const downloadUrl = URL.createObjectURL(blob);
+        const downloadUrlObj = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = downloadUrl;
+        a.href = downloadUrlObj;
         a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(downloadUrl);
+        URL.revokeObjectURL(downloadUrlObj);
 
         setDownloads((prev) =>
           prev.map((d) =>
@@ -114,7 +129,7 @@ export default function Home() {
         );
       }
     },
-    [videoInfo]
+    [videoInfo, cookieToken]
   );
 
   const handleCancel = useCallback((id: string) => {
@@ -126,6 +141,7 @@ export default function Home() {
     setVideoInfo(null);
     setError("");
     setPlatform("unknown");
+    setCookieToken(null);
   }, []);
 
   return (
@@ -155,6 +171,7 @@ export default function Home() {
               isLoading={phase === "parsing"}
               error={error}
             />
+            <CookieUpload cookies={cookies} onChange={setCookies} />
           </div>
 
           {/* Parsing State */}
