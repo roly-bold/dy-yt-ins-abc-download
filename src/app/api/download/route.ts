@@ -197,7 +197,7 @@ function runYtDlp(
   cookiesPath?: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const args = [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime", "--js-runtimes", "deno:/usr/local/bin/deno", "--remote-components", "ejs:github"];
+    const args = [url, "-f", formatId, "-o", outputPath, "--no-playlist", "--no-mtime", "--js-runtimes", "deno:/usr/local/bin/deno"];
     if (cookiesPath) {
       args.push("--cookies", cookiesPath);
     } else {

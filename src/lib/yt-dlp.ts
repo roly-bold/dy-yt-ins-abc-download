@@ -128,7 +128,7 @@ export class YtDlpError extends Error {
       return {
         httpStatus: 403,
         userMessage:
-          "YouTube is asking for sign-in. This video requires browser cookies to access. Some videos may not be downloadable from cloud servers.",
+          "YouTube bot detection triggered. This video requires browser cookies when accessed from cloud servers. Expand "YouTube Cookies (optional)" below the input bar, paste your cookies, and try again.",
       };
     }
     if (combined.includes("403") || combined.includes("forbidden")) {
@@ -153,7 +153,7 @@ export class YtDlpError extends Error {
       return {
         httpStatus: 403,
         userMessage:
-          "This video is private or requires authentication.",
+          "This video is private, age-restricted, or requires login. Try uploading browser cookies to access it.",
       };
     }
     if (combined.includes("no space")) {
@@ -179,7 +179,7 @@ export function classifyStderr(stderr: string): {
     return {
       httpStatus: 403,
       userMessage:
-        "YouTube is asking for sign-in. This video requires browser cookies to access. Some videos may not be downloadable from cloud servers.",
+        "YouTube bot detection triggered. This video requires browser cookies when accessed from cloud servers. Expand "YouTube Cookies (optional)" below the input bar, paste your cookies, and try again.",
     };
   }
   if (combined.includes("403") || combined.includes("forbidden")) {
@@ -203,7 +203,7 @@ export function classifyStderr(stderr: string): {
   ) {
     return {
       httpStatus: 403,
-      userMessage: "This video is private or requires authentication.",
+      userMessage: "This video is private, age-restricted, or requires login. Try uploading browser cookies to access it.",
     };
   }
   if (combined.includes("no space")) {
@@ -289,7 +289,7 @@ export async function analyzeVideo(
           "--dump-json",
           "--no-playlist",
           "--js-runtimes", "deno:/usr/local/bin/deno",
-          "--remote-components", "ejs:github",
+
         ];
         if (cookiesPath) {
           args.push("--cookies", cookiesPath);
