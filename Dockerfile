@@ -18,7 +18,7 @@ RUN echo '--js-runtimes deno:/usr/local/bin/deno' > /etc/yt-dlp.conf
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY . .
 RUN npm run build
