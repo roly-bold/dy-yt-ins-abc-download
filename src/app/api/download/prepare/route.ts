@@ -107,7 +107,7 @@ function runDownload(
     if (cookiesPath) {
       args.push("--cookies", cookiesPath);
     } else {
-      args.push("--extractor-args", "youtube:player_client=android,ios,web");
+      args.push("--extractor-args", "youtube:player_client=web,mweb,android");
     }
 
     console.log(`[prepare-yt-dlp] spawning: -f ${formatId} ${url.substring(0, 60)}... cookies=${cookiesPath ? "yes" : "no"}`);

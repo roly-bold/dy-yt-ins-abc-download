@@ -201,7 +201,7 @@ function runYtDlp(
     if (cookiesPath) {
       args.push("--cookies", cookiesPath);
     } else {
-      args.push("--extractor-args", "youtube:player_client=android,ios,web");
+      args.push("--extractor-args", "youtube:player_client=web,mweb,android");
     }
 
     console.log(`[yt-dlp] spawning: -f ${formatId} -o ${outputPath} ${url.substring(0, 60)}... cookies=${cookiesPath ? "yes" : "no"}`);
