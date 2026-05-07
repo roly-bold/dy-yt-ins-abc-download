@@ -128,7 +128,7 @@ export class YtDlpError extends Error {
       return {
         httpStatus: 403,
         userMessage:
-          "YouTube bot detection triggered. This video requires browser cookies when accessed from cloud servers. Expand "YouTube Cookies (optional)" below the input bar, paste your cookies, and try again.",
+          "YouTube bot detection triggered. This video requires browser cookies when accessed from cloud servers. Expand the YouTube Cookies section below the input bar, paste your cookies, and try again.",
       };
     }
     if (combined.includes("403") || combined.includes("forbidden")) {
@@ -179,7 +179,7 @@ export function classifyStderr(stderr: string): {
     return {
       httpStatus: 403,
       userMessage:
-        "YouTube bot detection triggered. This video requires browser cookies when accessed from cloud servers. Expand "YouTube Cookies (optional)" below the input bar, paste your cookies, and try again.",
+        "YouTube bot detection triggered. This video requires browser cookies when accessed from cloud servers. Expand the YouTube Cookies section below the input bar, paste your cookies, and try again.",
     };
   }
   if (combined.includes("403") || combined.includes("forbidden")) {
