@@ -26,4 +26,4 @@ RUN npm run build
 EXPOSE 3000
 
 # Self-update yt-dlp on every container start, then start Next.js standalone server
-CMD ["sh", "-c", "yt-dlp -U 2>/dev/null; node server.js"]
+CMD ["sh", "-c", "yt-dlp -U 2>/dev/null; node .next/standalone/server.js"]
